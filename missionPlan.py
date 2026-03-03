@@ -5,12 +5,14 @@ warnings.filterwarnings("ignore", module="do_mpc")
 
 from constants import Constants
 from spacecraft import Spacecraft
+from observation import Observation
 from lqrController import LQRController
-
-
+from CW_Model import CWModel
+from ekf import CWEKF
+from est_model import RRAzelModel
 from ff_engine import FreeFlyerEngine, RuntimeApiException
 
-mc = Constants()
+params = Constants()
 
 class MissionPlan:
     def __init__(self):
@@ -18,14 +20,21 @@ class MissionPlan:
 
     def create_and_run_engine(self):
         try:
-            with FreeFlyerEngine(mc.ff_install_dir) as engine:
+            with FreeFlyerEngine(params.ff_install_dir) as engine:
                 self.initialize_mission(engine)
 
-                chiefSC = Spacecraft(mc.chiefSC_Name, engine)
-                deputySC = Spacecraft(mc.deputySC_Name, engine)
+                chiefSC = Spacecraft(params.chiefSC_Name, engine)
+                deputySC = Spacecraft(params.deputySC_Name, engine)
+                obsv = Observation(params.obsv_Name, engine)
 
-                lqr = LQRController()
+                cw = CWModel(params)
+
+                lqr = LQRController(params, cw)
                 lqr.compute_K()
+                Phi, Gamma = lqr.get_AB_discrete(params.dt)
+
+                rrazel_model = RRAzelModel()
+                ekf = CWEKF(Phi, Gamma, params, rrazel_model)
 
                 start_day = chiefSC.get_epoch_days()
 
@@ -34,27 +43,36 @@ class MissionPlan:
                 engine.executeUntilApiLabel("Set state")
 
                 print("Set in the initial state.")
-                chiefSC.set_keplerian(mc.chiefSC_keplerian.tolist())
-                deputySC.set_keplerian(mc.deputySC_keplerian.tolist())
+                chiefSC.set_keplerian(params.chiefSC_keplerian.tolist())
+                deputySC.set_keplerian(params.deputySC_keplerian.tolist())
 
-                # chiefSC.set_cartesian(mc.chiefSC_position.tolist(), mc.chiefSC_velocity.tolist())
-                # deputySC.set_cartesian(mc.deputySC_position.tolist(), mc.deputySC_velocity.tolist())
+                true_state = deputySC.eci_relative_to_lvlh(chiefSC)
+                print("og_true_staet: ", true_state)
+                ekf.init_state(true_state)
+
 
                 deputySC.set_epoch(chiefSC.get_epoch())
                 
+                burn = np.zeros(3, dtype=float)
+
                 while True:
                     engine.executeUntilApiLabel("break")
+
                     current_day = chiefSC.get_epoch_days()
 
-                    if (current_day - start_day) >= mc.max_days:
+                    if (current_day - start_day) >= params.max_days:
                         print("Stopping loop.")
                         break
                     
-                    state = deputySC.eci_relative_to_lvlh(chiefSC)
+                    true_state = deputySC.eci_relative_to_lvlh(chiefSC)
+                    measurement = obsv.get_meas()
+                    state = ekf.step(measurement, burn)
 
                     burn = lqr.control_law(state)
-                    print(state, burn / 30)
-                    deputySC.set_burn(deputySC.CW_to_FF(burn / 30))
+                    print("true: ", true_state)
+                    print("ekf: ", state)
+                    # print(state, burn / params.dt)
+                    deputySC.set_burn(deputySC.CW_to_FF(burn * params.dt))
 
 
                 chiefSC.print_cartesian()
@@ -71,7 +89,7 @@ class MissionPlan:
 
     def initialize_mission(self, engine):
         print("Load the Mission Plan.")
-        engine.loadMissionPlanFromFile(mc.mission_plan_path)
+        engine.loadMissionPlanFromFile(params.mission_plan_path)
 
         print("Prepare to execute statements.")
         engine.prepareMissionPlan()

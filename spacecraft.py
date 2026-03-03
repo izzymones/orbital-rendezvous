@@ -93,10 +93,6 @@ class Spacecraft:
 
     # rewrite
     def eci_relative_to_lvlh(self, chief, refresh=True):
-        """
-        Returns x_rel = [r_LVLH; v_LVLH] as a 6x1 CasADi DM.
-        LVLH is built from the CHIEF (origin + frame).
-        """
         r_d, v_d = self.get_cartesian(refresh=refresh)
         r_c, v_c = chief.get_cartesian(refresh=refresh)
 

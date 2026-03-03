@@ -2,8 +2,8 @@ import sys
 from pathlib import Path
 
 file_path = Path(__file__).resolve()
-python_rtapi_src_path = file_path.parent / "ff_rtapi_src"
-sys.path.insert(0, str(python_rtapi_src_path))
+python_rtapi_src_path = r"C:\Users\izzym\Documents\FreeFlyer\FreeFlyer 7.10.0.43083514 (64-Bit)\Runtime API\python\src"
+sys.path.insert(0, python_rtapi_src_path)
 
 try:
     from aisolutions.freeflyer.runtimeapi.RuntimeApiEngine import RuntimeApiEngine
@@ -11,8 +11,8 @@ try:
     from aisolutions.freeflyer.runtimeapi.ConsoleOutputProcessingMethod import ConsoleOutputProcessingMethod
     from aisolutions.freeflyer.runtimeapi.WindowedOutputMode import WindowedOutputMode
     from aisolutions.freeflyer.runtimeapi.RuntimeApiException import RuntimeApiException
-except ImportError:
-    print("Import error!")
+except ImportError as e:
+    raise ImportError(f"Failed to import FreeFlyer Runtime API from {python_rtapi_src_path}: {e}")
 
 class FreeFlyerEngine:
     def __init__(self, install_dir):
