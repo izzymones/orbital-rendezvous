@@ -46,8 +46,6 @@ class CWEKF:
     
 
     def update_estimate(self, x_minus, K, z):
-        print("measured: ",z)
-        print("predicted: ",self.RRAzelModel.h(x_minus))
 
         y = z - np.array(self.RRAzelModel.h(x_minus)).reshape(4,)
         y[2] = self.wrap(y[2])

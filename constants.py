@@ -41,8 +41,8 @@ class Constants:
         ])
 
         self.Q_ekf = np.diag([
-            1e-8, 1e-8, 1e-8,
-            1e-12, 1e-12, 1e-12
+            1e-5, 1e-5, 1e-5,
+            1e-7, 1e-7, 1e-7
         ])
 
         self.R_ekf = np.array([

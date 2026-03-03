@@ -3,6 +3,8 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore", module="do_mpc")
 
+import matplotlib.pyplot as plt
+
 from constants import Constants
 from spacecraft import Spacecraft
 from observation import Observation
@@ -13,6 +15,9 @@ from est_model import RRAzelModel
 from ff_engine import FreeFlyerEngine, RuntimeApiException
 
 params = Constants()
+
+STATE_IDX = 0
+STATE_LABEL = "x (m)"
 
 class MissionPlan:
     def __init__(self):
@@ -38,6 +43,9 @@ class MissionPlan:
 
                 start_day = chiefSC.get_epoch_days()
 
+                t_log = []
+                true_log = []
+                ekf_log = []
 
                 print("Run to the 'Set state' label.")
                 engine.executeUntilApiLabel("Set state")
@@ -47,38 +55,49 @@ class MissionPlan:
                 deputySC.set_keplerian(params.deputySC_keplerian.tolist())
 
                 true_state = deputySC.eci_relative_to_lvlh(chiefSC)
-                print("og_true_staet: ", true_state)
-                ekf.init_state(true_state)
-
+                print("True State: ", true_state)
+                ekf.init_state(true_state + np.array([10, 0, 0, 0, 0, 0]))
 
                 deputySC.set_epoch(chiefSC.get_epoch())
-                
+
                 burn = np.zeros(3, dtype=float)
+                step_k = 0
 
                 while True:
                     engine.executeUntilApiLabel("break")
 
                     current_day = chiefSC.get_epoch_days()
-
                     if (current_day - start_day) >= params.max_days:
                         print("Stopping loop.")
                         break
-                    
+
                     true_state = deputySC.eci_relative_to_lvlh(chiefSC)
                     measurement = obsv.get_meas()
                     state = ekf.step(measurement, burn)
 
                     burn = lqr.control_law(state)
-                    print("true: ", true_state)
-                    print("ekf: ", state)
-                    # print(state, burn / params.dt)
-                    deputySC.set_burn(deputySC.CW_to_FF(burn * params.dt))
 
+                    t_log.append(step_k * params.dt)
+                    true_log.append(float(true_state[STATE_IDX]))
+                    ekf_log.append(float(state[STATE_IDX]))
+                    step_k += 1
+
+                    deputySC.set_burn(deputySC.CW_to_FF(burn * params.dt))
 
                 chiefSC.print_cartesian()
                 deputySC.print_cartesian()
                 deputySC.print_relative(chiefSC)
 
+                if len(t_log) > 1:
+                    plt.figure()
+                    plt.plot(t_log, true_log, label="True")
+                    plt.plot(t_log, ekf_log, label="EKF")
+                    plt.xlabel("Time (s)")
+                    plt.ylabel(STATE_LABEL)
+                    plt.title(f"EKF vs True ({STATE_LABEL})")
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.show()
 
         except RuntimeApiException as exp:
             print("RuntimeApiException:", getattr(exp, "message", str(exp)))
